@@ -34,15 +34,17 @@ def train_noise_level_estimator(model: ViT, dataloader, epochs: int, \
 
             # output = model(z) 
             output = model(z)
-            
+            output = output.squeeze() 
             #   Optmization
-            loss = torch.nn.MSELoss(reduction = "mean")(output, betas[t]) 
-            loss.backward()
             # breakpoint()
+            loss = torch.nn.BCELoss(reduction = "mean")(output, betas[t]) 
+            
+            loss.backward()
+            
             optimizer.step()
             total_loss += loss.item()
             count += 1
-            print("Epoch: {} -- Loss = {}".format(epoch+1, loss.item()))
+        print("Epoch: {} -- Loss = {}".format(epoch+1, loss.item()))
 
     #   Validate to save model
         curr_loss = total_loss / count
