@@ -22,6 +22,7 @@ def get_celeba(batch_size, dataset_directory, dataloader_workers):
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
     train_dataset = torchvision.datasets.ImageFolder(dataset_directory, train_transformation)
+    # train_dataset = torch.utils.data.Subset(train_dataset, range(0, 2000, 1)) 
 
     # Use sampler for randomization
     training_sampler = torch.utils.data.SubsetRandomSampler(range(len(train_dataset)))
