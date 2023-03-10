@@ -24,7 +24,7 @@ class ViTConfig:
     num_classes = 1         #   output size at the last mlp layer
     dim         = 768      #   embedding dim
     depth       = 6        #   number of encoders
-    heads       = 5         #   number of heads
+    heads       = 3         #   number of heads
     mlp_dim     = 768       #   last mlp layer dim
     pool        = 'cls'     #   
     channels    = 3
@@ -38,10 +38,11 @@ class TrainingConfig:
     num_worker = 0
     batch_size = 128
     lr = 1e-3
-    epochs = 1000
-    save_per_epochs = 1
-    loss_per_iter   = 20
+    epochs = 500000
+    save_per_epochs = 20
+    loss_per_iter   = 1
     save_imgs = True
+    save_model_per_epochs = 500
     
 @dataclass
 class DiffusionConfig:

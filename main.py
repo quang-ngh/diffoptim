@@ -26,7 +26,7 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
     lr                  = train_config.lr
     save_per_epochs     = train_config.save_per_epochs
     save_imgs           = train_config.save_imgs
-
+    save_model_per_epochs   = train_config.save_model_per_epochs
     #   Path config
     save_imgs_dir       = path_config.SAVE_IMGS
     ckpt_dir            = path_config.CHECKPOINTS
@@ -35,52 +35,44 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
     losses      = []
     optimizer   = torch.optim.AdamW(model.parameters(), lr = lr)
     betas = diffusion_config.betas
-
-    pbar_dataloader = tqdm(dataloader)
+    pbar_dataloader = tqdm(range(0, epochs))
     count = 0
-    for epoch in range(epochs):
+    for epoch in pbar_dataloader:
 
         unfreeze_model(model)
         model.train()
         total_loss = 0
+        #   Get input images
+        batch = next(iter(dataloader))
+        images, _ = batch
+        images = images.double().to(DEVICE)
+        B, C, H, W = images.shape
+
         
-        for idx, batch in enumerate(pbar_dataloader):
-            #   Get input images
-            images, _ = batch
-            images = images.double().to(DEVICE)
-            B, C, H, W = images.shape
+        #   Add noise respected to noise level
+        t = torch.randint(0, diffusion_config.T, (B,), device=DEVICE).long()
+        z = q_sample(images, t, diffusion_config.sqrt_alphas_cumprod, \
+                    diffusion_config.sqrt_one_minus_alphas_cumprod).double()
+        
 
-            
-            #   Add noise respected to noise level
-            t = torch.randint(0, diffusion_config.T, (B,), device=DEVICE).long()
-            z = q_sample(images, t, diffusion_config.sqrt_alphas_cumprod, \
-                        diffusion_config.sqrt_one_minus_alphas_cumprod).double()
-            
+        output = model(z)
+        output = output.squeeze() 
+        #   Optmization
+        loss = torch.nn.BCELoss(reduction = "mean")(output, betas[t]) 
 
-            output = model(z)
-            output = output.squeeze() 
-            #   Optmization
-            loss = torch.nn.BCELoss(reduction = "mean")(output, betas[t]) 
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+        count += 1
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-            count += 1
-
-            pbar_dataloader.set_postfix({"Loss": loss.item()})
-            if idx % train_config.loss_per_iter == 0:
-                logger.add_scalar('train/loss', loss.item(), count)
+        pbar_dataloader.set_postfix({"Loss": loss.item()})
+        logger.add_scalar('train/iter/loss', loss.item(), epoch)
 
     #   Validate to save model
         curr_loss = total_loss / count
-
-        if len(losses) == 0:
-            save_model(model, ckpt_dir / "checkpoint_epoch1") 
-        else:
-            if curr_loss < min(losses):             # Minimum loss
-                print("Current loss = {} < {}".format(curr_loss, min(losses)))
-                save_model(model, ckpt_dir / "checkpoints_epochs_{}".format(epoch+1))
+        if epoch % save_model_per_epochs == 0:
+            save_model(model, ckpt_dir / "checkpoints_epochs_{}".format(epoch+1))
 
         losses.append(curr_loss)
         
