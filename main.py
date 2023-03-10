@@ -37,6 +37,7 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
     betas = diffusion_config.betas
     pbar_dataloader = tqdm(range(0, epochs))
     count = 0
+    # breakpoint()
     for epoch in pbar_dataloader:
 
         unfreeze_model(model)
@@ -53,10 +54,17 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         t = torch.randint(0, diffusion_config.T, (B,), device=DEVICE).long()
         z = q_sample(images, t, diffusion_config.sqrt_alphas_cumprod, \
                     diffusion_config.sqrt_one_minus_alphas_cumprod).double()
-        
+
+        save_images(invTrans(z[:16]), path_config.SAVE_IMGS / "inter.png")
 
         output = model(z)
         output = output.squeeze() 
+        for i in range(4):
+            path = f'save_img_{i+1}.png'
+
+            save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
+            print(path + f'-- Estimation = {output[i]} -- Real = {betas[t[i]]} -- Time = {t[i]}')
+        exit()
         #   Optmization
         loss = torch.nn.BCELoss(reduction = "mean")(output, betas[t]) 
 
@@ -67,12 +75,12 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         count += 1
 
         pbar_dataloader.set_postfix({"Loss": loss.item()})
-        logger.add_scalar('train/iter/loss', loss.item(), epoch)
+        logger.add_scalar('train/iter/config2/loss', loss.item(), epoch)
 
     #   Validate to save model
         curr_loss = total_loss / count
         if epoch % save_model_per_epochs == 0:
-            save_model(model, ckpt_dir / "checkpoints_epochs_{}".format(epoch+1))
+            save_model(model, ckpt_dir / "config2"/"checkpoints_epochs_{}".format(epoch+1))
 
         losses.append(curr_loss)
         
@@ -106,12 +114,12 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
         sampling_optimizer.zero_grad()                       
         loss.backward()
         sampling_optimizer.step()
-        logger.add_scalar('sampling/loss', loss.item(), step)
+        logger.add_scalar('sampling/config2/loss', loss.item(), step)
     
     
     gen = invTrans(z)
     path = "sample_epochs_"+str(epoch) + ".png"
-    save_images(gen, path_config.SAVE_IMGS / path) 
+    save_images(gen, path_config.SAVE_IMGS / "config2"/ path) 
     return gen
 
 def freeze_model(model):

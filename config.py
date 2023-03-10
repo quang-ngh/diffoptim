@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from utils import *
 import torch 
 
-DEVICE = torch.device('cuda:2') if torch.cuda.is_available() else 'cpu'
+DEVICE = torch.device('cuda:0') if torch.cuda.is_available() else 'cpu'
 
 @dataclass
 class PathConfig:
@@ -22,10 +22,10 @@ class ViTConfig:
     image_size  = 64        #   batch_size
     patch_size  = 8         #   patch size
     num_classes = 1         #   output size at the last mlp layer
-    dim         = 768      #   embedding dim
+    dim         = 512      #   embedding dim
     depth       = 6        #   number of encoders
     heads       = 3         #   number of heads
-    mlp_dim     = 768       #   last mlp layer dim
+    mlp_dim     = 512       #   last mlp layer dim
     pool        = 'cls'     #   
     channels    = 3
     dim_heads   = 64
@@ -37,7 +37,7 @@ class TrainingConfig:
 
     num_worker = 0
     batch_size = 128
-    lr = 1e-3
+    lr = 2e-5
     epochs = 500000
     save_per_epochs = 20
     loss_per_iter   = 1
@@ -51,8 +51,8 @@ class DiffusionConfig:
     sampling_steps = 500
     sampling_batch_size = 16
 
-    T                               = 500
-    betas                           = cosine_beta_schedule(T).to(DEVICE).double()
+    T                               = 1000
+    betas                           = linear_beta_schedule(T).to(DEVICE).double()
     alphas                          = 1. - betas.to(DEVICE).double()
     alphas_cumprod                  = torch.cumprod(alphas, dim=0).to(DEVICE).double()
     alphas_cumprod_prev             = torch.nn.functional.pad(alphas_cumprod[:-1], (1, 0), value = 1.).to(DEVICE).double()

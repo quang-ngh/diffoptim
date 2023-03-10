@@ -52,8 +52,8 @@ def linear_beta_schedule(timesteps):
     linear schedule, proposed in original ddpm paper
     """
     scale = 1000 / timesteps
-    beta_start = scale * 0.0001
-    beta_end = scale * 0.02
+    beta_start = 1e-8   
+    beta_end = 1. - beta_start
     return torch.linspace(beta_start, beta_end, timesteps, dtype = torch.float64)
 
 def cosine_beta_schedule(timesteps, s = 0.008):
@@ -85,7 +85,7 @@ def sigmoid_beta_schedule(timesteps, start = -3, end = 3, tau = 1, clamp_min = 1
 
 def q_sample(x_start, t, sqrt_alphas_cumprod, \
             sqrt_one_minus_alphas_cumprod, noise=None):
-        noise = default(noise, lambda: torch.randn_like(x_start, device = 'cuda:2'))
+        noise = default(noise, lambda: torch.randn_like(x_start, device = 'cuda:0'))
 
         return (
             extract(sqrt_alphas_cumprod, t, x_start.shape) * x_start +
