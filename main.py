@@ -10,9 +10,19 @@ from config import *
 from model import ViT
 from torch.utils.tensorboard import SummaryWriter
 
+"""
+    1. Correct the prediction: predict the 1 - alpha_cum_prod
+        * Use sigmoid schedule
+
+    2. BCEWithLogitLoss:
+        * Correct models
+        * Correct loss in main
+    
+"""
+
 logger = SummaryWriter() 
 logits          = torch.zeros(16, requires_grad = False, device = DEVICE).double()       #   expected
-loss_fn         = torch.nn.BCELoss(reduction = 'mean') 
+loss_fn         = torch.nn.BCEWithLogitsLoss(reduction = 'mean') 
 invTrans = transforms.Compose([ transforms.Normalize(mean = [ 0., 0., 0. ],
                                                     std = [ 1/0.5, 1/0.5, 1/0.5 ]),
                             transforms.Normalize(mean = [ -0.5, -0.5, -0.5 ],
@@ -21,23 +31,33 @@ invTrans = transforms.Compose([ transforms.Normalize(mean = [ 0., 0., 0. ],
 
 def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig, \
                                 train_config: TrainingConfig, diffusion_config: DiffusionConfig):
+    #   Path config
+    save_imgs_dir       = path_config.SAVE_IMGS
+    ckpt_dir            = path_config.CHECKPOINTS
+    
     #   Training config
     epochs              = train_config.epochs
     lr                  = train_config.lr
     save_per_epochs     = train_config.save_per_epochs
     save_imgs           = train_config.save_imgs
     save_model_per_epochs   = train_config.save_model_per_epochs
-    #   Path config
-    save_imgs_dir       = path_config.SAVE_IMGS
-    ckpt_dir            = path_config.CHECKPOINTS
-
+   
     #   Setup train
-    losses      = []
-    optimizer   = torch.optim.AdamW(model.parameters(), lr = lr)
-    betas = diffusion_config.betas
+    losses                              = []
+    optimizer                           = torch.optim.AdamW(model.parameters(), lr = lr)
+    betas                               = diffusion_config.betas
+    alphas_cumprod                      = diffusion_config.alphas_cumprod
+    one_minus_alpha_cumprod             = 1. - diffusion_config.alphas_cumprod
+    sqrt_alphas_cumprod                 = diffusion_config.sqrt_alphas_cumprod
+    sqrt_one_minus_alphas_cumprod       = diffusion_config.sqrt_one_minus_alphas_cumprod
+
     pbar_dataloader = tqdm(range(0, epochs))
     count = 0
+
+    # plt.plot(one_minus_alpha_cunprod.detach().cpu().numpy())
+    # plt.savefig(path_config.SAVE_IMGS / "one_minus.png") 
     # breakpoint()
+
     for epoch in pbar_dataloader:
 
         unfreeze_model(model)
@@ -52,45 +72,41 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         
         #   Add noise respected to noise level
         t = torch.randint(0, diffusion_config.T, (B,), device=DEVICE).long()
-        z = q_sample(images, t, diffusion_config.sqrt_alphas_cumprod, \
-                    diffusion_config.sqrt_one_minus_alphas_cumprod).double()
+        z = q_sample(images, t, sqrt_alphas_cumprod, \
+                    sqrt_one_minus_alphas_cumprod).double()
 
-        save_images(invTrans(z[:16]), path_config.SAVE_IMGS / "inter.png")
+        # save_images(invTrans(z[:16]), path_config.SAVE_IMGS / "inter.png")
 
         output = model(z)
         output = output.squeeze() 
-        for i in range(4):
-            path = f'save_img_{i+1}.png'
 
-            save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
-            print(path + f'-- Estimation = {output[i]} -- Real = {betas[t[i]]} -- Time = {t[i]}')
-        exit()
+        # for i in range(4):
+        #     path = f'save_img_{i+1}.png'
+
+        #     save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
+        #     print(path + f'-- Estimation = {output[i]} -- Real = {betas[t[i]]} -- Time = {t[i]}')
+        # exit()
         #   Optmization
-        loss = torch.nn.BCELoss(reduction = "mean")(output, betas[t]) 
+        
+        loss = torch.nn.BCEWithLogitsLoss(reduction = "mean")(output, one_minus_alpha_cumprod[t]) 
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        total_loss += loss.item()
-        count += 1
 
         pbar_dataloader.set_postfix({"Loss": loss.item()})
-        logger.add_scalar('train/iter/config2/loss', loss.item(), epoch)
+        logger.add_scalar('train/sigmoid/config1/loss', loss.item(), epoch)
 
     #   Validate to save model
-        curr_loss = total_loss / count
         if epoch % save_model_per_epochs == 0:
-            save_model(model, ckpt_dir / "config2"/"checkpoints_epochs_{}".format(epoch+1))
-
-        losses.append(curr_loss)
-        
+            save_model(model, ckpt_dir / "config1"/"checkpoints_epochs_{}".format(epoch+1))
+ 
         if epoch % save_per_epochs == 0:
             freeze_model(model)
             model.eval()
             z = sampling(model, epoch, path_config, diffusion_config)
 
         logger.flush()
-    save_loss(losses, save_imgs_dir / "loss.png")
 
 def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_config: DiffusionConfig): 
     
@@ -101,7 +117,7 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
     z               = torch.randn(B, C, H, W, device = DEVICE).double()
     z               = torch.nn.parameter.Parameter(z, requires_grad = True)
 
-    lr = 1e-3
+    lr = diffusion_config.sampling_lr
 
     sampling_optimizer = torch.optim.AdamW([z], lr = lr)
 
@@ -114,12 +130,12 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
         sampling_optimizer.zero_grad()                       
         loss.backward()
         sampling_optimizer.step()
-        logger.add_scalar('sampling/config2/loss', loss.item(), step)
+        logger.add_scalar('sampling/sigmoid/config1/loss', loss.item(), step)
     
     
     gen = invTrans(z)
     path = "sample_epochs_"+str(epoch) + ".png"
-    save_images(gen, path_config.SAVE_IMGS / "config2"/ path) 
+    save_images(gen, path_config.SAVE_IMGS / "config1"/ path) 
     return gen
 
 def freeze_model(model):

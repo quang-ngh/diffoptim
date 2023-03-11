@@ -107,9 +107,9 @@ class ViT(nn.Module):
         self.to_latent = nn.Identity()
 
         self.mlp_head = nn.Sequential(
+            #   BCEWithLogitLoss does not require sigmoid activation at output
             nn.LayerNorm(dim),
             nn.Linear(dim, num_classes),
-            nn.Sigmoid()
         )
 
     def forward(self, img):
