@@ -22,7 +22,7 @@ def get_celeba(batch_size, dataset_directory, dataloader_workers):
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
     train_dataset = torchvision.datasets.ImageFolder(dataset_directory, train_transformation)
-    # train_dataset = torch.utils.data.Subset(train_dataset, range(0, 2000, 1)) 
+    train_dataset = torch.utils.data.Subset(train_dataset, range(0, 400, 1)) 
 
     # Use sampler for randomization
     training_sampler = torch.utils.data.SubsetRandomSampler(range(len(train_dataset)))
@@ -52,8 +52,8 @@ def linear_beta_schedule(timesteps):
     linear schedule, proposed in original ddpm paper
     """
     scale = 1000 / timesteps
-    beta_start = 1e-8   
-    beta_end = 1. - beta_start
+    beta_start = 1e-4
+    beta_end = 1e-2
     return torch.linspace(beta_start, beta_end, timesteps, dtype = torch.float64)
 
 def cosine_beta_schedule(timesteps, s = 0.008):

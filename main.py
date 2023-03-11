@@ -18,7 +18,14 @@ invTrans = transforms.Compose([ transforms.Normalize(mean = [ 0., 0., 0. ],
                             transforms.Normalize(mean = [ -0.5, -0.5, -0.5 ],
                                                     std = [ 1., 1., 1. ]),
                             ])
+"""
+Linear beta configuration:
+    * betas is linearly scheduled from (0, 1) respected to T. 
+        t = 0 -> beta_t = 0; t = T -> beta_t = 1
+        For implementation, visit: ./utils: linear_beta_schedule(timesteps) (from line 50 to 57)
 
+BCELossWithLogit: remove sigmoid layer in the last mlp
+"""
 def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig, \
                                 train_config: TrainingConfig, diffusion_config: DiffusionConfig):
     #   Training config
@@ -37,7 +44,6 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
     betas = diffusion_config.betas
     pbar_dataloader = tqdm(range(0, epochs))
     count = 0
-    # breakpoint()
     for epoch in pbar_dataloader:
 
         unfreeze_model(model)
@@ -55,18 +61,23 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         z = q_sample(images, t, diffusion_config.sqrt_alphas_cumprod, \
                     diffusion_config.sqrt_one_minus_alphas_cumprod).double()
 
-        save_images(invTrans(z[:16]), path_config.SAVE_IMGS / "inter.png")
+        # path = f'images_{epoch+1}.png'
+        # save_images(invTrans(images[:16]), path_config.SAVE_IMGS / path)
+        # print(betas[t[:16]])
+        # exit()
 
         output = model(z)
         output = output.squeeze() 
-        for i in range(4):
-            path = f'save_img_{i+1}.png'
 
-            save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
-            print(path + f'-- Estimation = {output[i]} -- Real = {betas[t[i]]} -- Time = {t[i]}')
-        exit()
+
+        # for i in range(4):
+        #     path = f'save_img_{i+1}.png'
+
+        #     save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
+        #     print(path + f'-- Estimation = {output[i]} -- Real = {betas[t[i]]} -- Time = {t[i]}')
+        
         #   Optmization
-        loss = torch.nn.BCELoss(reduction = "mean")(output, betas[t]) 
+        loss = torch.nn.BCELossWithLogit(reduction = "mean")(output, betas[t]) 
 
         optimizer.zero_grad()
         loss.backward()
@@ -75,12 +86,13 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         count += 1
 
         pbar_dataloader.set_postfix({"Loss": loss.item()})
-        logger.add_scalar('train/iter/config2/loss', loss.item(), epoch)
+        pbar_dataloader.set_postfix({"Noise predict": output})
+        logger.add_scalar('train/iter/config3/loss', loss.item(), epoch)
 
     #   Validate to save model
         curr_loss = total_loss / count
         if epoch % save_model_per_epochs == 0:
-            save_model(model, ckpt_dir / "config2"/"checkpoints_epochs_{}".format(epoch+1))
+            save_model(model, ckpt_dir / "config3"/"checkpoints_epochs_{}".format(epoch+1))
 
         losses.append(curr_loss)
         
@@ -114,12 +126,12 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
         sampling_optimizer.zero_grad()                       
         loss.backward()
         sampling_optimizer.step()
-        logger.add_scalar('sampling/config2/loss', loss.item(), step)
+        logger.add_scalar('sampling/config3/loss', loss.item(), step)
     
     
     gen = invTrans(z)
     path = "sample_epochs_"+str(epoch) + ".png"
-    save_images(gen, path_config.SAVE_IMGS / "config2"/ path) 
+    save_images(gen, path_config.SAVE_IMGS / "config3"/ path) 
     return gen
 
 def freeze_model(model):
