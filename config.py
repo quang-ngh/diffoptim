@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from utils import *
 import torch 
 
-DEVICE = torch.device('cuda:0') if torch.cuda.is_available() else 'cpu'
+DEVICE = torch.device('cuda:1') if torch.cuda.is_available() else 'cpu'
 
 @dataclass
 class PathConfig:
@@ -36,10 +36,10 @@ class ViTConfig:
 class TrainingConfig:
 
     num_worker = 0
-    batch_size = 128
+    batch_size = 512
     lr = 2e-5
     epochs = 500000
-    save_per_epochs = 20
+    save_per_epochs = 500
     loss_per_iter   = 1
     save_imgs = True
     save_model_per_epochs = 500
@@ -50,9 +50,9 @@ class DiffusionConfig:
     #   Sampling
     sampling_steps = 500
     sampling_batch_size = 16
-
+    sampling_lr         = 1e-4
     T                               = 1000
-    betas                           = linear_beta_schedule(T).to(DEVICE).double()
+    betas                           = sigmoid_beta_schedule(T).to(DEVICE).double()
     alphas                          = 1. - betas.to(DEVICE).double()
     alphas_cumprod                  = torch.cumprod(alphas, dim=0).to(DEVICE).double()
     alphas_cumprod_prev             = torch.nn.functional.pad(alphas_cumprod[:-1], (1, 0), value = 1.).to(DEVICE).double()
