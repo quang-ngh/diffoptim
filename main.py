@@ -95,11 +95,11 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         optimizer.step()
 
         pbar_dataloader.set_postfix({"Loss": loss.item()})
-        logger.add_scalar('train/sigmoid/config2/loss', loss.item(), epoch)
+        logger.add_scalar('train/cosine/config1/loss', loss.item(), epoch)
 
     #   Validate to save model
         if epoch % save_model_per_epochs == 0:
-            save_model(model, ckpt_dir / "config2"/"checkpoints_epochs_{}".format(epoch+1))
+            save_model(model, ckpt_dir / "config1"/"checkpoints_epochs_{}".format(epoch+1))
  
         if epoch % save_per_epochs == 0:
             freeze_model(model)
@@ -130,12 +130,12 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
         sampling_optimizer.zero_grad()                       
         loss.backward()
         sampling_optimizer.step()
-        logger.add_scalar('sampling/sigmoid/config2/loss', loss.item(), step)
+        logger.add_scalar('sampling/cosine/config1/loss', loss.item(), step)
     
     
     gen = invTrans(z)
     path = "sample_epochs_"+str(epoch) + ".png"
-    save_images(gen, path_config.SAVE_IMGS / "config2"/ path) 
+    save_images(gen, path_config.SAVE_IMGS / "config1"/ path) 
     return gen
 
 def freeze_model(model):
@@ -203,7 +203,7 @@ if __name__ == '__main__':
 
     # torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-    print("Sigmoid configuration with config2")
+    print("Sigmoid  configuration with config2")
     print("Load configurations...")
     param = pyrallis.parse(config_class = ViTConfig)
     path =  pyrallis.parse(config_class = PathConfig)
