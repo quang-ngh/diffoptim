@@ -52,7 +52,7 @@ class DiffusionConfig:
     sampling_batch_size = 16
     sampling_lr         = 1e-4
     T                               = 1000
-    betas                           = sigmoid_beta_schedule(T).to(DEVICE).double()
+    betas                           = cosine_beta_schedule(T).to(DEVICE).double()
     alphas                          = 1. - betas.to(DEVICE).double()
     alphas_cumprod                  = torch.cumprod(alphas, dim=0).to(DEVICE).double()
     alphas_cumprod_prev             = torch.nn.functional.pad(alphas_cumprod[:-1], (1, 0), value = 1.).to(DEVICE).double()

@@ -203,7 +203,7 @@ if __name__ == '__main__':
 
     # torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-    print("Sigmoid configuration with config2")
+    print("Cosine configuration with config1")
     print("Load configurations...")
     param = pyrallis.parse(config_class = ViTConfig)
     path =  pyrallis.parse(config_class = PathConfig)
