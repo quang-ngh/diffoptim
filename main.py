@@ -81,11 +81,11 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         optimizer.step()
 
         pbar_dataloader.set_postfix({"Loss": loss.item()})
-        logger.add_scalar('train/mse/config1', loss.item(), epoch)
+        logger.add_scalar('train/mse/config2', loss.item(), epoch)
 
     #   Validate to save model
         if epoch % save_model_per_epochs == 0:
-            save_model(model, ckpt_dir / "mse"/"checkpoints_epochs_{}".format(epoch))
+            save_model(model, ckpt_dir / "mse-softplus"/"checkpoints_epochs_{}".format(epoch))
  
         if epoch % save_per_epochs == 0:
             freeze_model(model)
@@ -116,12 +116,12 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
         sampling_optimizer.zero_grad()                       
         loss.backward()
         sampling_optimizer.step()
-        logger.add_scalar('sampling/mse/config1/loss', loss.item(), step)
+        logger.add_scalar('sampling/mse/config2/loss', loss.item(), step)
     
     
     gen = invTrans(z)
     path = "sample_epochs_"+str(epoch) + ".png"
-    save_images(gen, path_config.SAVE_IMGS / "mse"/ path) 
+    save_images(gen, path_config.SAVE_IMGS / "mse-softplus"/ path) 
     return gen
 
 def freeze_model(model):
@@ -189,7 +189,7 @@ if __name__ == '__main__':
 
     # torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-    print("MSE Loss without softplus")
+    print("MSE Loss with softplus")
     print("Load configurations...")
     param = pyrallis.parse(config_class = ViTConfig)
     path =  pyrallis.parse(config_class = PathConfig)
