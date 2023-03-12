@@ -70,6 +70,11 @@ def sample(batch, dict_path):
         print(f'Loss = {loss.item()} -- Noise level = {out[0]}')
 
     save_images(z, path_config.SAVE_IMGS / 'sample.png')
+
+def explicit_sample(batch, dict_path): 
+    pass
+
+
 def test_model(dict_path, dataloader):
     
     model = ViT(
@@ -89,6 +94,8 @@ def test_model(dict_path, dataloader):
     model.load_state_dict(torch.load(dict_path))
     model.eval()
 
+    sampling_steps = 1000
+    lr             = 2e-3
 
     batch = next(iter(dataloader))
     images, _ = batch
@@ -105,18 +112,39 @@ def test_model(dict_path, dataloader):
     t = torch.randint(0, diffusion_config.T, (B,), device=DEVICE).long()
     z = q_sample(images, t, sqrt_alphas_cumprod, \
                 sqrt_one_minus_alphas_cumprod).double()
+    output = model(z).squeeze()
+    for i in range(4):
+        path = f'test_mse_{i+1}.png'
 
-    save_images(z, path_config.SAVE_IMGS / "test_noisy.png") 
+        save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
+        print(path + f'-- Estimation = {output[i]} -- Real = {one_minus_alpha_cumprod[t[i]]} -- Time = {t[i]}')
+    exit()
 
-    output = model(z)
-    output = torch.nn.Sigmoid()(output)
-    output = output.squeeze() 
+    save_images(z, path_config.SAVE_IMGS / "noisy_images.png") 
 
-    for i in range(t.shape[0]):
-        print(f'Time step = {t[i]} -- Real noise level = {one_minus_alpha_cumprod[t[i]]} -- Predict = {output[i]}')
+    z = torch.nn.parameter.Parameter(z, requires_grad = True)
+    sampling_optimizer = torch.optim.AdamW([z], lr = lr)
+    loss_fn             = torch.nn.MSELoss(reduction = 'mean')
+    logits = torch.zeros(B, device = DEVICE, requires_grad = False).double()
+
+    for step in range(sampling_steps):
+
+        output = model(z)
+        output = output.squeeze() 
+        loss = loss_fn(output, logits)
+        sampling_optimizer.zero_grad()
+        loss.backward()
+        sampling_optimizer.step() 
+        print(f'Loss = {loss.item()}')
+
+
+    save_images(z, path_config.SAVE_IMGS / 'denoise_image.png')
+    # for i in range(t.shape[0]):
+    #     print(f'Time step = {t[i]} -- Real noise level = {one_minus_alpha_cumprod[t[i]]} -- Predict = {output[i]}')
 if __name__ == '__main__':
-
-    sample(16, path_config.CHECKPOINTS / "cosine/config1/checkpoints_epochs_40001")
+    dataset, dataloader = get_celeba(16, path_config.CELEBA_DIR, 0)
+    ckpt_path = path_config.CHECKPOINTS / 'mse/checkpoints_epochs_15000'
+    test_model(ckpt_path, dataloader)
 
     # dataset, dataloader = get_celeba(5, path_config.CELEBA_DIR, 0)
     # test_model(path_config.CHECKPOINTS / "cosine/config1/checkpoints_epochs_40001", dataloader)

@@ -36,7 +36,7 @@ class ViTConfig:
 class TrainingConfig:
 
     num_worker = 0
-    batch_size = 200
+    batch_size = 16
     lr = 2e-5
     epochs = 500000
     save_per_epochs = 20
