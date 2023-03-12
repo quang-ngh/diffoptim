@@ -80,12 +80,12 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         output = model(z)
         output = output.squeeze() 
 
-        # for i in range(4):
-        #     path = f'save_img_{i+1}.png'
+        for i in range(4):
+            path = f'save_img_{i+1}.png'
 
-        #     save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
-        #     print(path + f'-- Estimation = {output[i]} -- Real = {betas[t[i]]} -- Time = {t[i]}')
-        # exit()
+            save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
+            print(path + f'-- Estimation = {output[i]} -- Real = {one_minus_alpha_cumprod[t[i]]} -- Time = {t[i]}')
+        exit()
         #   Optmization
         
         loss = torch.nn.BCEWithLogitsLoss(reduction = "mean")(output, one_minus_alpha_cumprod[t]) 
