@@ -10,8 +10,20 @@ from config import *
 from model import ViT
 from torch.utils.tensorboard import SummaryWriter
 
+"""
+Train MSE config3
+    * Predict sqrt_alphas_cumprod and sqrt_one_minus
+"""
+
 logger          = SummaryWriter() 
-logits          = torch.zeros(16, requires_grad = False, device = DEVICE).double()       #   expected
+logits          = torch.cat(
+    (
+        torch.ones(16,1 , requires_grad = False, device = DEVICE).double(),
+        torch.zeros(16,1 , requires_grad = False, device = DEVICE).double()
+    ),
+    dim = 1
+)
+# logits          = torch.zeros(16, requires_grad = False, device = DEVICE).double()       #   expected
 loss_fn         = torch.nn.MSELoss(reduction = 'mean') 
 invTrans = transforms.Compose([ transforms.Normalize(mean = [ 0., 0., 0. ],
                                                     std = [ 1/0.5, 1/0.5, 1/0.5 ]),
@@ -34,16 +46,22 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
     #   Setup train
     loss_train_estimator = torch.nn.MSELoss(reduction = 'mean')
     loss_reconstruction  = torch.nn.MSELoss(reduction = 'mean')
-    losses      = []
-    optimizer   = torch.optim.AdamW(model.parameters(), lr = lr)
+    optimizer            = torch.optim.AdamW(model.parameters(), lr = lr)
     
+
     betas                           = diffusion_config.betas
     alphas_cumprod                  = diffusion_config.alphas_cumprod
     one_minus_alphas_cumprod        = 1. - alphas_cumprod
     sqrt_alphas_cumprod             = diffusion_config.sqrt_alphas_cumprod
     sqrt_one_minus_alphas_cumprod   = diffusion_config.sqrt_one_minus_alphas_cumprod
     T                               = diffusion_config.T
-
+    
+    # Noise level: sqrt_alphas_cumprod and sqrt_one_minus
+    noise_level = torch.cat(
+        (sqrt_alphas_cumprod.view(T, 1),                #   1 - 0
+        sqrt_one_minus_alphas_cumprod.view(T,1)),       #   0 - 1
+        dim = 1
+    )
     pbar_dataloader = tqdm(range(0, epochs))
     
     for epoch in pbar_dataloader:
@@ -63,19 +81,17 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
 
         # save_images(invTrans(z[:16]), path_config.SAVE_IMGS / "inter.png")
 
-        output = model(z)               #   Predict 1 - alphas_cumprod
-        
-        sqrt_one_minus_alphas_cumprod_pred   = torch.clip(output, min = 0., max = 1.)
-        sqrt_one_minus_alphas_cumprod_pred   = torch.reshape(sqrt_one_minus_alphas_cumprod_pred, (B, 1,1,1))
+        output = model(z)               #   Predict 1 - alphas_cumprod  
+        sqrt_alphas_cumprod_pred             = torch.reshape(output[:, 0], (B, 1, 1, 1))
+        sqrt_one_minus_alphas_cumprod_pred   = torch.reshape(output[:, 1], (B, 1,1,1))
 
-        sqrt_alphas_cumprod_pred             = torch.sqrt(1 - sqrt_one_minus_alphas_cumprod_pred ** 2)
-        sqrt_alphas_cumprod_pred             = torch.reshape(sqrt_alphas_cumprod_pred, (B, 1, 1, 1))
+        # breakpoint()
         #   Train with loss noise level prediction to learn noise level first
         #   Learn how to reconstruct
-        # breakpoint()
+        
         z_reconstruct                   = sqrt_alphas_cumprod_pred * images + sqrt_one_minus_alphas_cumprod_pred * noise
         
-        loss                            = loss_train_estimator(output.squeeze(), sqrt_one_minus_alphas_cumprod[t]) 
+        loss                            = loss_train_estimator(output.squeeze(), noise_level[t]) 
         loss_reconstruct                = loss_reconstruction(z, z_reconstruct) 
         ensemble_loss                   = loss + loss_reconstruct 
         optimizer.zero_grad()
@@ -91,16 +107,15 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
 
         #   Optmization
         
-
         pbar_dataloader.set_postfix({"Loss": loss.item()})
         pbar_dataloader.set_postfix({'Reconstruction loss': loss_reconstruct.item()})
-        logger.add_scalar('train/mse/config1/noise_level', loss.item(), epoch)
-        logger.add_scalar('train/mse/config1/reconstruct', loss_reconstruct.item(), epoch)
-        logger.add_scalar('train/mse/config1/ensemble', ensemble_loss.item(), epoch)
+        logger.add_scalar('train/mse/config3/noise_level', loss.item(), epoch)
+        logger.add_scalar('train/mse/config3/reconstruct', loss_reconstruct.item(), epoch)
+        logger.add_scalar('train/mse/config3/ensemble', ensemble_loss.item(), epoch)
 
     #   Validate to save model
         if epoch % save_model_per_epochs == 0:
-            save_model(model, ckpt_dir / "mse" / "config2" /"checkpoints_epochs_{}".format(epoch))
+            save_model(model, ckpt_dir / "mse" / "config3" /"checkpoints_epochs_{}".format(epoch))
  
         if epoch % save_per_epochs == 0:
             freeze_model(model)
@@ -123,7 +138,7 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
     lr = 1e-3
 
     sampling_optimizer = torch.optim.AdamW([z], lr = lr)
-
+    
                             #   loss function
     #   Optimize to generate
     for step in range(steps): 
@@ -133,7 +148,7 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
         sampling_optimizer.zero_grad()                       
         loss.backward()
         sampling_optimizer.step()
-        logger.add_scalar('sampling/mse/config1/loss', loss.item(), step)
+        logger.add_scalar('sampling/mse/config3/loss', loss.item(), step)
     
     
     gen = invTrans(z)
@@ -206,7 +221,7 @@ if __name__ == '__main__':
 
     # torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-    print("MSE Loss without softplus")
+    print("MSE Loss without softplus config3")
     print("Load configurations...")
     param = pyrallis.parse(config_class = ViTConfig)
     path =  pyrallis.parse(config_class = PathConfig)

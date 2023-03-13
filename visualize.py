@@ -72,7 +72,7 @@ def sample(batch, dict_path):
     save_images(z, path_config.SAVE_IMGS / 'sample.png')
 
 def explicit_sample(batch, dict_path): 
-    pass
+    
 
 
 def test_model(dict_path, dataloader):

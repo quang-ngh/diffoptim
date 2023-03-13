@@ -5,6 +5,8 @@ import torch
 
 DEVICE = torch.device('cuda:0') if torch.cuda.is_available() else 'cpu'
 
+#   MSE Config 3
+#   Num classes: 2: sqrt_alphas_cumprod and sqrt_one_minus
 @dataclass
 class PathConfig:
     DATA_DIR = Path('/home/ubuntu/newSDE/dataset')
@@ -21,7 +23,7 @@ class ViTConfig:
 
     image_size  = 64        #   batch_size
     patch_size  = 8         #   patch size
-    num_classes = 1         #   output size at the last mlp layer
+    num_classes = 2         #   output size at the last mlp layer
     dim         = 768      #   embedding dim
     depth       = 6        #   number of encoders
     heads       = 3         #   number of heads
