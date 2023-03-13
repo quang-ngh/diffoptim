@@ -73,9 +73,7 @@ def sample(batch, dict_path):
 
 def explicit_sample(batch, dict_path): 
     
-
-
-def test_model(dict_path, dataloader):
+def test_model(dict_path, dataloader, config):
     
     model = ViT(
         image_size          = vit_config.image_size,

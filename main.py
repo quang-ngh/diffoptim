@@ -153,7 +153,7 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
     
     gen = invTrans(z)
     grid = make_grid(gen[:16], nrow = 4)
-    logger.add_image(f'sample_at_epoch{epoch}', grid, epoch)
+    logger.add_image(f'sample_at_epoch{epoch}_config3', grid, epoch)
     return gen
 
 def freeze_model(model):
