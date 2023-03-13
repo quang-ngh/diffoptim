@@ -33,6 +33,7 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
 
     #   Setup train
     loss_train_estimator = torch.nn.MSELoss(reduction = 'mean')
+    loss_reconstruction  = torch.nn.MSELoss(reduction = 'mean')
     losses      = []
     optimizer   = torch.optim.AdamW(model.parameters(), lr = lr)
     
@@ -47,9 +48,6 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
     
     for epoch in pbar_dataloader:
 
-        unfreeze_model(model)
-        model.train()
-
         #   Get input images
         batch = next(iter(dataloader))
         images, _ = batch
@@ -58,14 +56,32 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
 
         #   Add noise respected to noise level
         t = torch.randint(0, T, (B,), device=DEVICE).long()
-        z = q_sample(images, t, sqrt_alphas_cumprod, \
-                    sqrt_one_minus_alphas_cumprod).double()
+        noise, z = q_sample(images, t, sqrt_alphas_cumprod, \
+                    sqrt_one_minus_alphas_cumprod)
+        z       = z.double()
+        noise   = noise.double()
 
         # save_images(invTrans(z[:16]), path_config.SAVE_IMGS / "inter.png")
 
-        output = model(z)
-        output = output.squeeze() 
+        output = model(z)               #   Predict 1 - alphas_cumprod
         
+        sqrt_one_minus_alphas_cumprod_pred   = torch.clip(output, min = 0., max = 1.)
+        sqrt_one_minus_alphas_cumprod_pred   = torch.reshape(sqrt_one_minus_alphas_cumprod_pred, (B, 1,1,1))
+
+        sqrt_alphas_cumprod_pred             = torch.sqrt(1 - sqrt_one_minus_alphas_cumprod_pred ** 2)
+        sqrt_alphas_cumprod_pred             = torch.reshape(sqrt_alphas_cumprod_pred, (B, 1, 1, 1))
+        #   Train with loss noise level prediction to learn noise level first
+        #   Learn how to reconstruct
+        # breakpoint()
+        z_reconstruct                   = sqrt_alphas_cumprod_pred * images + sqrt_one_minus_alphas_cumprod_pred * noise
+        
+        loss                            = loss_train_estimator(output.squeeze(), sqrt_one_minus_alphas_cumprod[t]) 
+        loss_reconstruct                = loss_reconstruction(z, z_reconstruct) 
+        ensemble_loss                   = loss + loss_reconstruct 
+        optimizer.zero_grad()
+        ensemble_loss.backward()
+        optimizer.step()        
+
         # for i in range(4):
         #     path = f'save_img_mse_{i+1}.png'
 
@@ -74,23 +90,24 @@ def train_noise_level_estimator(model: ViT, dataloader, path_config: PathConfig,
         # exit()
 
         #   Optmization
-        loss = loss_train_estimator(output, one_minus_alphas_cumprod[t])
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        
 
         pbar_dataloader.set_postfix({"Loss": loss.item()})
-        logger.add_scalar('train/mse/config1', loss.item(), epoch)
+        pbar_dataloader.set_postfix({'Reconstruction loss': loss_reconstruct.item()})
+        logger.add_scalar('train/mse/config1/noise_level', loss.item(), epoch)
+        logger.add_scalar('train/mse/config1/reconstruct', loss_reconstruct.item(), epoch)
+        logger.add_scalar('train/mse/config1/ensemble', ensemble_loss.item(), epoch)
 
     #   Validate to save model
         if epoch % save_model_per_epochs == 0:
-            save_model(model, ckpt_dir / "mse"/"checkpoints_epochs_{}".format(epoch))
+            save_model(model, ckpt_dir / "mse" / "config2" /"checkpoints_epochs_{}".format(epoch))
  
         if epoch % save_per_epochs == 0:
             freeze_model(model)
             model.eval()
             z = sampling(model, epoch, path_config, diffusion_config)
+            unfreeze_model(model)
+            model.train()
 
         logger.flush()
 
@@ -103,7 +120,7 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
     z               = torch.randn(B, C, H, W, device = DEVICE).double()
     z               = torch.nn.parameter.Parameter(z, requires_grad = True)
 
-    lr = 1e-2
+    lr = 1e-3
 
     sampling_optimizer = torch.optim.AdamW([z], lr = lr)
 
@@ -120,8 +137,8 @@ def sampling(estimator: ViT, epoch: int, path_config: PathConfig, diffusion_conf
     
     
     gen = invTrans(z)
-    path = "sample_epochs_"+str(epoch) + ".png"
-    save_images(gen, path_config.SAVE_IMGS / "mse"/ path) 
+    grid = make_grid(gen[:16], nrow = 4)
+    logger.add_image(f'sample_at_epoch{epoch}', grid, epoch)
     return gen
 
 def freeze_model(model):

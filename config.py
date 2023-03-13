@@ -22,13 +22,13 @@ class ViTConfig:
     image_size  = 64        #   batch_size
     patch_size  = 8         #   patch size
     num_classes = 1         #   output size at the last mlp layer
-    dim         = 512      #   embedding dim
+    dim         = 768      #   embedding dim
     depth       = 6        #   number of encoders
     heads       = 3         #   number of heads
-    mlp_dim     = 512       #   last mlp layer dim
+    mlp_dim     = 768       #   last mlp layer dim
     pool        = 'cls'     #   
     channels    = 3
-    dim_heads   = 64
+    dim_heads   = 128
     dropout     = 0.0
     emb_dropout = 0.0
 
@@ -36,10 +36,10 @@ class ViTConfig:
 class TrainingConfig:
 
     num_worker = 0
-    batch_size = 16
+    batch_size = 200
     lr = 2e-5
     epochs = 500000
-    save_per_epochs = 20
+    save_per_epochs = 200
     loss_per_iter   = 1
     save_imgs = True
     save_model_per_epochs = 500
@@ -48,7 +48,7 @@ class TrainingConfig:
 class DiffusionConfig:
 
     #   Sampling
-    sampling_steps = 1000
+    sampling_steps = 500
     sampling_batch_size = 16
 
     T                               = 1000

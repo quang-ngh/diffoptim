@@ -85,10 +85,14 @@ def sigmoid_beta_schedule(timesteps, start = -3, end = 3, tau = 1, clamp_min = 1
 
 def q_sample(x_start, t, sqrt_alphas_cumprod, \
             sqrt_one_minus_alphas_cumprod, noise=None):
-        noise = default(noise, lambda: torch.randn_like(x_start, device = 'cuda:0'))
-
-        return (
+        
+        if noise is None:
+            noise = default(noise, lambda: torch.randn_like(x_start, device = 'cuda:0'))
+        else:
+            print("Passed noise")
+        return noise, (
             extract(sqrt_alphas_cumprod, t, x_start.shape) * x_start +
             extract(sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
+
 
