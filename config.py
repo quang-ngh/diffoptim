@@ -50,7 +50,7 @@ class TrainingConfig:
 class DiffusionConfig:
 
     #   Sampling
-    sampling_steps = 500
+    sampling_steps = 1000
     sampling_batch_size = 16
 
     T                               = 1000

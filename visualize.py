@@ -72,8 +72,9 @@ def sample(batch, dict_path):
     save_images(z, path_config.SAVE_IMGS / 'sample.png')
 
 def explicit_sample(batch, dict_path): 
-    
-def test_model(dict_path, dataloader, config):
+    pass
+
+def test_model(dict_path, dataloader):
     
     model = ViT(
         image_size          = vit_config.image_size,
@@ -90,58 +91,88 @@ def test_model(dict_path, dataloader, config):
         emb_dropout         = vit_config.emb_dropout
     ).double().to(DEVICE)
     model.load_state_dict(torch.load(dict_path))
+    for param in model.parameters():
+        param.requires_grad = False
     model.eval()
 
     sampling_steps = 1000
-    lr             = 2e-3
+    lr             = 1e-2
 
     batch = next(iter(dataloader))
     images, _ = batch
-    images = images[:4].double().to(DEVICE)
+    images = images[:16].double().to(DEVICE)
     B, C, H, W = images.shape
 
     betas                               = diffusion_config.betas
+    betas.requires_grad = False
     alphas_cumprod                      = diffusion_config.alphas_cumprod
     one_minus_alpha_cumprod             = 1. - diffusion_config.alphas_cumprod
     sqrt_alphas_cumprod                 = diffusion_config.sqrt_alphas_cumprod
     sqrt_one_minus_alphas_cumprod       = diffusion_config.sqrt_one_minus_alphas_cumprod
+    T                                   = diffusion_config.T 
+    noise_level = torch.cat(
+        (sqrt_alphas_cumprod.view(T, 1),                #   1 - 0
+        sqrt_one_minus_alphas_cumprod.view(T,1)),       #   0 - 1
+        dim = 1
+    )
     
     #   Add noise respected to noise level
-    t = torch.randint(0, diffusion_config.T, (B,), device=DEVICE).long()
-    z = q_sample(images, t, sqrt_alphas_cumprod, \
-                sqrt_one_minus_alphas_cumprod).double()
-    output = model(z).squeeze()
-    for i in range(4):
-        path = f'test_mse_{i+1}.png'
+    # t                   = torch.randint(0, diffusion_config.T, (B,), device=DEVICE).long()
+    # noise, z                   = q_sample(images, t, sqrt_alphas_cumprod, \
+    #                         sqrt_one_minus_alphas_cumprod)
+    # z                   = z.double()
 
-        save_images(z[i, :, :, :], path_config.SAVE_IMGS / path)
-        print(path + f'-- Estimation = {output[i]} -- Real = {one_minus_alpha_cumprod[t[i]]} -- Time = {t[i]}')
-    exit()
+    z                   =   torch.randn_like(images, device = DEVICE, requires_grad = True).double()
+    save_images(z, path_config.FIGURES / 'init_noise.png')
 
-    save_images(z, path_config.SAVE_IMGS / "noisy_images.png") 
-
-    z = torch.nn.parameter.Parameter(z, requires_grad = True)
-    sampling_optimizer = torch.optim.AdamW([z], lr = lr)
+    z                   = torch.nn.parameter.Parameter(z, requires_grad = True)
+    sampling_optimizer  = torch.optim.AdamW([z], lr = lr)
     loss_fn             = torch.nn.MSELoss(reduction = 'mean')
-    logits = torch.zeros(B, device = DEVICE, requires_grad = False).double()
 
+    # logits              = torch.cat(
+    #     (
+    #         torch.ones(16,1 , requires_grad = False, device = DEVICE).double(),
+    #         torch.zeros(16,1 , requires_grad = False, device = DEVICE).double()
+    #     ),
+    #     dim = 1
+    # )
+
+    alpha_sample = (1. - betas).view(T, 1, 1, 1)
+
+    print(f'Sampling in {sampling_steps}')
     for step in range(sampling_steps):
 
         output = model(z)
-        output = output.squeeze() 
-        loss = loss_fn(output, logits)
+
+        B, D    = output.shape      #   batch x 2
+
+        #   Diff between sqrt_one_minus predicted with sqrt_one_minus predefined
+
+        logits  = torch.ones(B, 1, device = DEVICE, requires_grad = False) * sqrt_one_minus_alphas_cumprod[sampling_steps - step - 1]
+        logits  = logits.double()
+        loss    = loss_fn(output[:, 1], logits)
+        # breakpoint()
+
+        #   Implicit sampling
         sampling_optimizer.zero_grad()
         loss.backward()
         sampling_optimizer.step() 
+
+        z.requires_grad = False
+        z += betas[sampling_steps - step - 1] * torch.randn_like(z, requires_grad = False, device = DEVICE).double()
+        z.requires_grad = True
         print(f'Loss = {loss.item()}')
+        print(f'Sqrt one minus predicted at {sampling_steps - step} = {output[:, 1]}')
 
+        # if step == sampling_steps - 1:
+        #     z_T = output[:, 0].view(16,1,1,1) * images + output[:, 1].view(16,1,1,1) * noise
+        #     save_images(z_T, path_config.FIGURES / 'real_level_noise.png')
 
-    save_images(z, path_config.SAVE_IMGS / 'denoise_image.png')
-    # for i in range(t.shape[0]):
-    #     print(f'Time step = {t[i]} -- Real noise level = {one_minus_alpha_cumprod[t[i]]} -- Predict = {output[i]}')
+    save_images(z, path_config.FIGURES / "sample_implicit_46500.png")
+
 if __name__ == '__main__':
     dataset, dataloader = get_celeba(16, path_config.CELEBA_DIR, 0)
-    ckpt_path = path_config.CHECKPOINTS / 'mse/checkpoints_epochs_15000'
+    ckpt_path = path_config.CHECKPOINTS / 'mse/config3/checkpoints_epochs_46500'
     test_model(ckpt_path, dataloader)
 
     # dataset, dataloader = get_celeba(5, path_config.CELEBA_DIR, 0)
